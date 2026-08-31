@@ -1,89 +1,94 @@
-
-from datetime import datetime
+from flask import Blueprint, request, jsonify
 
 from database import db
+from models.supplier import Supplier
 
 
-class Supplier(db.Model):
-    __tablename__ = "suppliers"
+suppliers_bp = Blueprint(
+    "suppliers",
+    __name__,
+    url_prefix="/api/suppliers"
+)
 
-    id = db.Column(db.Integer, primary_key=True)
 
-    # Supplier type:
-    # company
-    # individual_seller
-    # sole_proprietor
-    supplier_type = db.Column(
-        db.String(50),
-        nullable=False,
-        default="company"
+@suppliers_bp.route("", methods=["POST"])
+def create_supplier():
+    data = request.get_json()
+
+    if not data:
+        return jsonify({
+            "error": "Request body is required"
+        }), 400
+
+    required_fields = [
+        "country",
+        "email"
+    ]
+
+    for field in required_fields:
+        if not data.get(field):
+            return jsonify({
+                "error": f"{field} is required"
+            }), 400
+
+    existing_supplier = Supplier.query.filter_by(
+        email=data["email"]
+    ).first()
+
+    if existing_supplier:
+        return jsonify({
+            "error": "Supplier with this email already exists"
+        }), 409
+
+    supplier = Supplier(
+        supplier_type=data.get(
+            "supplier_type",
+            "company"
+        ),
+        company_name=data.get("company_name"),
+        country=data["country"],
+        email=data["email"],
+        contact_name=data.get("contact_name"),
+        phone=data.get("phone"),
+        website=data.get("website"),
+        registration_number=data.get(
+            "registration_number"
+        ),
+        tax_id=data.get("tax_id"),
+        legal_address=data.get(
+            "legal_address"
+        ),
+        business_name=data.get(
+            "business_name"
+        ),
+        tracking_available=data.get(
+            "tracking_available",
+            False
+        ),
+        processing_time_days=data.get(
+            "processing_time_days"
+        )
     )
 
-    # Common information
-    company_name = db.Column(db.String(200))
-    country = db.Column(db.String(100), nullable=False)
+    db.session.add(supplier)
+    db.session.commit()
 
-    email = db.Column(db.String(200), nullable=False, unique=True)
-    contact_name = db.Column(db.String(200))
-    phone = db.Column(db.String(50))
-    website = db.Column(db.String(300))
+    return jsonify({
+        "message": "Supplier created successfully",
+        "supplier": supplier.to_dict()
+    }), 201
 
-    # Business / legal information
-    registration_number = db.Column(db.String(100))
-    tax_id = db.Column(db.String(100))
-    legal_address = db.Column(db.String(500))
-    business_name = db.Column(db.String(200))
 
-    # Verification
-    verification_status = db.Column(
-        db.String(50),
-        default="pending",
-        nullable=False
-    )
+@suppliers_bp.route("", methods=["GET"])
+def get_suppliers():
+    suppliers = Supplier.query.order_by(
+        Supplier.created_at.desc()
+    ).all()
 
-    # Shipping
-    tracking_available = db.Column(
-        db.Boolean,
-        default=False
-    )
-
-    processing_time_days = db.Column(db.Integer)
-
-    # AI evaluation
-    ai_score = db.Column(db.Float)
-
-    created_at = db.Column(
-        db.DateTime,
-        default=datetime.utcnow
-    )
-
-    def to_dict(self):
-        return {
-            "id": self.id,
-            "supplier_type": self.supplier_type,
-
-            "company_name": self.company_name,
-            "business_name": self.business_name,
-
-            "country": self.country,
-            "email": self.email,
-            "contact_name": self.contact_name,
-            "phone": self.phone,
-            "website": self.website,
-
-            "registration_number": self.registration_number,
-            "tax_id": self.tax_id,
-            "legal_address": self.legal_address,
-
-            "verification_status": self.verification_status,
-
-            "tracking_available": self.tracking_available,
-            "processing_time_days": self.processing_time_days,
-
-            "ai_score": self.ai_score,
-
-            "created_at": (
-                self.created_at.isoformat()
-                if self.created_at else None
-            )
-        }
+    return jsonify({
+        "count": len(suppliers),
+        "suppliers": [
+            supplier.to_dict()
+            for supplier in suppliers
+        ]
+    })
