@@ -1,86 +1,80 @@
-from flask import Blueprint, request, jsonify
+from datetime import datetime
 
 from database import db
-from models.product import Product
-from models.supplier import Supplier
 
 
-products_bp = Blueprint(
-    "products",
-    __name__,
-    url_prefix="/api/products"
-)
+class Product(db.Model):
+    __tablename__ = "products"
 
+    id = db.Column(db.Integer, primary_key=True)
 
-@products_bp.route("", methods=["POST"])
-def create_product():
-    data = request.get_json()
-
-    if not data:
-        return jsonify({
-            "error": "Request body is required"
-        }), 400
-
-    required_fields = [
-        "supplier_id",
-        "title",
-        "price"
-    ]
-
-    for field in required_fields:
-        if data.get(field) is None:
-            return jsonify({
-                "error": f"{field} is required"
-            }), 400
-
-    supplier = Supplier.query.get(data["supplier_id"])
-
-    if not supplier:
-        return jsonify({
-            "error": "Supplier not found"
-        }), 404
-
-    product = Product(
-        supplier_id=data["supplier_id"],
-        title=data["title"],
-        description=data.get("description"),
-        price=data["price"],
-        currency=data.get("currency", "USD"),
-        stock=data.get("stock", 0),
-        shipping_cost=data.get("shipping_cost", 0),
-        shipping_countries=data.get("shipping_countries"),
-        processing_time_days=data.get(
-            "processing_time_days"
-        ),
-        tracking_available=data.get(
-            "tracking_available",
-            False
-        ),
-        image_url=data.get("image_url"),
-        status="active"
+    supplier_id = db.Column(
+        db.Integer,
+        db.ForeignKey("suppliers.id"),
+        nullable=False
     )
 
-    db.session.add(product)
-    db.session.commit()
+    title = db.Column(db.String(300), nullable=False)
+    description = db.Column(db.Text)
 
-    return jsonify({
-        "message": "Product created successfully",
-        "product": product.to_dict()
-    }), 201
+    price = db.Column(db.Float, nullable=False)
+    currency = db.Column(
+        db.String(10),
+        default="USD",
+        nullable=False
+    )
 
+    stock = db.Column(
+        db.Integer,
+        default=0,
+        nullable=False
+    )
 
-@products_bp.route("", methods=["GET"])
-def get_products():
-    products = Product.query.filter_by(
-        status="active"
-    ).order_by(
-        Product.created_at.desc()
-    ).all()
+    shipping_cost = db.Column(
+        db.Float,
+        default=0
+    )
 
-    return jsonify({
-        "count": len(products),
-        "products": [
-            product.to_dict()
-            for product in products
-        ]
-    })
+    shipping_countries = db.Column(db.Text)
+
+    processing_time_days = db.Column(db.Integer)
+
+    tracking_available = db.Column(
+        db.Boolean,
+        default=False
+    )
+
+    image_url = db.Column(db.String(500))
+
+    ai_score = db.Column(db.Float)
+
+    status = db.Column(
+        db.String(50),
+        default="active",
+        nullable=False
+    )
+
+    created_at = db.Column(
+        db.DateTime,
+        default=datetime.utcnow
+    )
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "supplier_id": self.supplier_id,
+            "title": self.title,
+            "description": self.description,
+            "price": self.price,
+            "currency": self.currency,
+            "stock": self.stock,
+            "shipping_cost": self.shipping_cost,
+            "shipping_countries": self.shipping_countries,
+            "processing_time_days": self.processing_time_days,
+            "tracking_available": self.tracking_available,
+            "image_url": self.image_url,
+            "ai_score": self.ai_score,
+            "status": self.status,
+            "created_at": self.created_at.isoformat()
+            if self.created_at else None
+        }
