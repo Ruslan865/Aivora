@@ -1,4 +1,4 @@
-```python
+
 from datetime import datetime
 
 from database import db
@@ -87,4 +87,4 @@ class Supplier(db.Model):
                 if self.created_at else None
             )
         }
-```
+
