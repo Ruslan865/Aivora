@@ -1,3 +1,4 @@
+
 from flask import Blueprint, request, jsonify
 
 from database import db
@@ -21,7 +22,6 @@ def create_supplier():
         }), 400
 
     required_fields = [
-        "company_name",
         "country",
         "email"
     ]
@@ -42,12 +42,26 @@ def create_supplier():
         }), 409
 
     supplier = Supplier(
-        company_name=data["company_name"],
+        supplier_type=data.get(
+            "supplier_type",
+            "company"
+        ),
+        company_name=data.get("company_name"),
         country=data["country"],
         email=data["email"],
         contact_name=data.get("contact_name"),
         phone=data.get("phone"),
         website=data.get("website"),
+        registration_number=data.get(
+            "registration_number"
+        ),
+        tax_id=data.get("tax_id"),
+        legal_address=data.get(
+            "legal_address"
+        ),
+        business_name=data.get(
+            "business_name"
+        ),
         tracking_available=data.get(
             "tracking_available",
             False
