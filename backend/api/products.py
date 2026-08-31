@@ -1,86 +1,72 @@
 from flask import Blueprint, request, jsonify
-
 from database import db
 from models.product import Product
-from models.supplier import Supplier
+
+products_bp = Blueprint("products", __name__, url_prefix="/api/products")
 
 
-products_bp = Blueprint(
-    "products",
-    __name__,
-    url_prefix="/api/products"
-)
-
-
-@products_bp.route("", methods=["POST"])
-def create_product():
-    data = request.get_json()
-
-    if not data:
-        return jsonify({
-            "error": "Request body is required"
-        }), 400
-
-    required_fields = [
-        "supplier_id",
-        "title",
-        "price"
-    ]
-
-    for field in required_fields:
-        if data.get(field) is None:
-            return jsonify({
-                "error": f"{field} is required"
-            }), 400
-
-    supplier = Supplier.query.get(data["supplier_id"])
-
-    if not supplier:
-        return jsonify({
-            "error": "Supplier not found"
-        }), 404
-
-    product = Product(
-        supplier_id=data["supplier_id"],
-        title=data["title"],
-        description=data.get("description"),
-        price=data["price"],
-        currency=data.get("currency", "USD"),
-        stock=data.get("stock", 0),
-        shipping_cost=data.get("shipping_cost", 0),
-        shipping_countries=data.get("shipping_countries"),
-        processing_time_days=data.get(
-            "processing_time_days"
-        ),
-        tracking_available=data.get(
-            "tracking_available",
-            False
-        ),
-        image_url=data.get("image_url"),
-        status="active"
-    )
-
-    db.session.add(product)
-    db.session.commit()
-
-    return jsonify({
-        "message": "Product created successfully",
-        "product": product.to_dict()
-    }), 201
-
-
+# GET /api/products
+# Bütün aktiv məhsulları göstərir
 @products_bp.route("", methods=["GET"])
 def get_products():
-    products = Product.query.filter_by(
-        status="active"
-    ).order_by(
-        Product.created_at.desc()
+    products = Product.query.filter_by(status="active").all()
+
+    return jsonify({
+        "count": len(products),
+        "products": [product.to_dict() for product in products]
+    }), 200
+
+
+# GET /api/products/<id>
+# Konkret məhsulu göstərir
+@products_bp.route("/<int:product_id>", methods=["GET"])
+def get_product(product_id):
+    product = Product.query.get(product_id)
+
+    if not product:
+        return jsonify({
+            "error": "Product not found"
+        }), 404
+
+    return jsonify({
+        "product": product.to_dict()
+    }), 200
+
+
+# GET /api/products/search?q=...
+# Məhsul axtarışı
+@products_bp.route("/search", methods=["GET"])
+def search_products():
+    query = request.args.get("q", "").strip()
+
+    if not query:
+        return jsonify({
+            "error": "Search query is required"
+        }), 400
+
+    products = Product.query.filter(
+        Product.status == "active",
+        Product.title.ilike(f"%{query}%")
     ).all()
 
     return jsonify({
         "count": len(products),
-        "products": [
-            product.to_dict()
-            for product in products
-        ]
-    })
+        "query": query,
+        "products": [product.to_dict() for product in products]
+    }), 200
+
+
+# GET /api/products/supplier/<supplier_id>
+# Müəyyən supplier-in məhsulları
+@products_bp.route("/supplier/<int:supplier_id>", methods=["GET"])
+def get_supplier_products(supplier_id):
+    products = Product.query.filter_by(
+        supplier_id=supplier_id,
+        status="active"
+    ).all()
+
+    return jsonify({
+        "count": len(products),
+        "supplier_id": supplier_id,
+        "products": [product.to_dict() for product in products]
+    }), 200
