@@ -1,90 +1,141 @@
-
-from datetime import datetime
+from flask import Blueprint, request, jsonify
 
 from database import db
+from models.supplier import Supplier
 
 
-class Supplier(db.Model):
-    __tablename__ = "suppliers"
+suppliers_bp = Blueprint(
+    "suppliers",
+    __name__,
+    url_prefix="/api/suppliers"
+)
 
-    id = db.Column(db.Integer, primary_key=True)
 
-    # Supplier type:
-    # company
-    # individual_seller
-    # sole_proprietor
-    supplier_type = db.Column(
-        db.String(50),
-        nullable=False,
-        default="company"
+@suppliers_bp.route("", methods=["POST"])
+def create_supplier():
+    data = request.get_json()
+
+    if not data:
+        return jsonify({
+            "error": "Request body is required"
+        }), 400
+
+    required_fields = [
+        "country",
+        "email"
+    ]
+
+    for field in required_fields:
+        if not data.get(field):
+            return jsonify({
+                "error": f"{field} is required"
+            }), 400
+
+    supplier_type = data.get(
+        "supplier_type",
+        "company"
     )
 
-    # Common information
-    company_name = db.Column(db.String(200))
-    country = db.Column(db.String(100), nullable=False)
+    allowed_types = [
+        "company",
+        "individual_seller",
+        "sole_proprietor"
+    ]
 
-    email = db.Column(db.String(200), nullable=False, unique=True)
-    contact_name = db.Column(db.String(200))
-    phone = db.Column(db.String(50))
-    website = db.Column(db.String(300))
+    if supplier_type not in allowed_types:
+        return jsonify({
+            "error": "Invalid supplier_type",
+            "allowed_types": allowed_types
+        }), 400
 
-    # Business / legal information
-    registration_number = db.Column(db.String(100))
-    tax_id = db.Column(db.String(100))
-    legal_address = db.Column(db.String(500))
-    business_name = db.Column(db.String(200))
+    # Company üçün company_name tələb olunur.
+    # Individual seller və sole proprietor üçün isə
+    # contact_name və ya company_name istifadə oluna bilər.
+    company_name = data.get("company_name")
 
-    # Verification
-    verification_status = db.Column(
-        db.String(50),
-        default="pending",
-        nullable=False
+    if supplier_type == "company" and not company_name:
+        return jsonify({
+            "error": "company_name is required for company supplier"
+        }), 400
+
+    if not company_name:
+        company_name = data.get("contact_name")
+
+    if not company_name:
+        return jsonify({
+            "error": "company_name or contact_name is required"
+        }), 400
+
+    existing_supplier = Supplier.query.filter_by(
+        email=data["email"]
+    ).first()
+
+    if existing_supplier:
+        return jsonify({
+            "error": "Supplier with this email already exists"
+        }), 409
+
+    supplier = Supplier(
+        supplier_type=supplier_type,
+
+        company_name=company_name,
+        country=data["country"],
+        email=data["email"],
+        contact_name=data.get("contact_name"),
+        phone=data.get("phone"),
+        website=data.get("website"),
+
+        registration_number=data.get(
+            "registration_number"
+        ),
+        tax_id=data.get(
+            "tax_id"
+        ),
+        legal_address=data.get(
+            "legal_address"
+        ),
+        business_name=data.get(
+            "business_name"
+        ),
+
+        verification_status=data.get(
+            "verification_status",
+            "pending"
+        ),
+
+        tracking_available=data.get(
+            "tracking_available",
+            False
+        ),
+
+        processing_time_days=data.get(
+            "processing_time_days"
+        ),
+
+        ai_score=data.get(
+            "ai_score"
+        )
     )
 
-    # Shipping
-    tracking_available = db.Column(
-        db.Boolean,
-        default=False
-    )
+    db.session.add(supplier)
+    db.session.commit()
 
-    processing_time_days = db.Column(db.Integer)
+    return jsonify({
+        "message": "Supplier created successfully",
+        "supplier": supplier.to_dict()
+    }), 201
 
-    # AI evaluation
-    ai_score = db.Column(db.Float)
 
-    created_at = db.Column(
-        db.DateTime,
-        default=datetime.utcnow
-    )
+@suppliers_bp.route("", methods=["GET"])
+def get_suppliers():
+    suppliers = Supplier.query.order_by(
+        Supplier.created_at.desc()
+    ).all()
 
-    def to_dict(self):
-        return {
-            "id": self.id,
-            "supplier_type": self.supplier_type,
-
-            "company_name": self.company_name,
-            "business_name": self.business_name,
-
-            "country": self.country,
-            "email": self.email,
-            "contact_name": self.contact_name,
-            "phone": self.phone,
-            "website": self.website,
-
-            "registration_number": self.registration_number,
-            "tax_id": self.tax_id,
-            "legal_address": self.legal_address,
-
-            "verification_status": self.verification_status,
-
-            "tracking_available": self.tracking_available,
-            "processing_time_days": self.processing_time_days,
-
-            "ai_score": self.ai_score,
-
-            "created_at": (
-                self.created_at.isoformat()
-                if self.created_at else None
-            )
-        }
-
+    return jsonify({
+        "count": len(suppliers),
+        "suppliers": [
+            supplier.to_dict()
+            for supplier in suppliers
+        ]
+    })
